@@ -1,0 +1,45 @@
+name: Azure CI/CD (Bicep + ACR + App Service)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set variables
+        run: |
+          echo "ACR_NAME=${{ secrets.ACR_NAME }}" >> $GITHUB_ENV
+          echo "APP_NAME=${{ secrets.APP_NAME }}" >> $GITHUB_ENV
+          echo "RESOURCE_GROUP=${{ secrets.RESOURCE_GROUP }}" >> $GITHUB_ENV
+
+      - name: Deploy infrastructure (Bicep)
+        run: |
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file infra/bicep/main.bicep \
+            --parameters registryName=${{ env.ACR_NAME }} appName=${{ env.APP_NAME }} location=westus3
+
+      - name: Build Docker image and push to ACR
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src
+          push: true
+          tags: ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest
+
+      - name: Configure Web App to use ACR image
+        run: |
+          az webapp config container set \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --docker-custom-image-name ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest
