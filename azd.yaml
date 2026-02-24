@@ -1,0 +1,19 @@
+name: ZavaStorefront
+resourceGroup: zavastorefront-rg
+location: westus3
+
+provision:
+  - name: deploy-infra
+    description: Deploy infra Bicep templates
+    command: |
+      az deployment group create \
+        --resource-group ${AZURE_RESOURCE_GROUP:-zavastorefront-rg} \
+        --template-file infra/bicep/main.bicep \
+        --parameters registryName=${AZURE_ACR_NAME:-zavastorefrontacr} appName=${AZURE_APP_NAME:-zavastorefront-app} planName=${AZURE_APP_PLAN:-zavastorefront-plan} appInsightsName=${AZURE_APPINSIGHTS_NAME:-zavastorefront-ai} location=westus3
+
+services:
+  web:
+    # Use an image reference so `azd up` will not attempt to build/publish locally.
+    # CI/GitHub Actions will build and push the image to ACR, then update the App Service.
+    image: ${AZURE_ACR_NAME:-zavastorefrontacr}.azurecr.io/${AZURE_APP_NAME:-zavastorefront-app}:latest
+    start-command: dotnet run --project src
